@@ -3,12 +3,17 @@
   import { onMount, onDestroy } from "svelte";
   import PlayIcon from "./lib/icons/PlayIcon.svelte";
   import PauseIcon from "./lib/icons/PauseIcon.svelte";
+  import UpIcon from "./lib/icons/UpIcon.svelte";
+  import DownIcon from "./lib/icons/DownIcon.svelte";
+  import SpeakerIcon from "./lib/icons/SpeakerIcon.svelte";
+  import SpeakerMutedIcon from "./lib/icons/SpeakerMutedIcon.svelte";
 
   let currentSectionIndex: number = 0;
   let isAutoScrolling: boolean = false;
   let timeRemaining: number = 0;
   let timer: ReturnType<typeof setInterval> | null = null;
   let sectionElements: HTMLDivElement[] = [];
+  let voiceEnabled: boolean = false;
 
   onMount(() => {
     if (isAutoScrolling) {
@@ -78,6 +83,7 @@
     isAutoScrolling = !isAutoScrolling;
 
     if (isAutoScrolling) {
+      scrollToSection(currentSectionIndex);
       startTimer();
     } else {
       stopTimer();
@@ -96,6 +102,34 @@
     startTimer();
   }
 
+  function previousSection(): void {
+    if (currentSectionIndex > 0) {
+      stopTimer();
+      currentSectionIndex--;
+      scrollToSection(currentSectionIndex);
+
+      if (isAutoScrolling) {
+        startTimer();
+      }
+    }
+  }
+
+  function nextSectionManual(): void {
+    if (currentSectionIndex < conversationSections.length - 1) {
+      stopTimer();
+      currentSectionIndex++;
+      scrollToSection(currentSectionIndex);
+
+      if (isAutoScrolling) {
+        startTimer();
+      }
+    }
+  }
+
+  function toggleVoice(): void {
+    voiceEnabled = !voiceEnabled;
+  }
+
   $: progressPercent = conversationSections[currentSectionIndex]
     ? ((conversationSections[currentSectionIndex].durationMs - timeRemaining) /
         conversationSections[currentSectionIndex].durationMs) *
@@ -104,6 +138,23 @@
 </script>
 
 <div class="controls">
+  <div class="navigation-buttons">
+    <button
+      class="nav-btn"
+      on:click={previousSection}
+      disabled={currentSectionIndex === 0}
+    >
+      <UpIcon />
+    </button>
+    <button
+      class="nav-btn"
+      on:click={nextSectionManual}
+      disabled={currentSectionIndex === conversationSections.length - 1}
+    >
+      <DownIcon />
+    </button>
+  </div>
+
   <button class="play-pause-btn" on:click={toggleAutoScroll}>
     {#if isAutoScrolling}
       <PauseIcon />
@@ -116,6 +167,14 @@
     <span class="label">auto-scrolling</span>
     <div class="status-circle" class:pulsing={isAutoScrolling}></div>
   </div>
+
+  <button class="voice-btn" on:click={toggleVoice}>
+    {#if voiceEnabled}
+      <SpeakerIcon />
+    {:else}
+      <SpeakerMutedIcon />
+    {/if}
+  </button>
 
   {#if isAutoScrolling}
     <div class="progress-bar">
@@ -214,14 +273,14 @@
     left: 50%;
     transform: translateX(-50%);
     background: white;
-    width: 200px;
+    width: 240px;
     height: 60px;
     border-radius: 12px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    padding: 0.5rem 1rem;
+    gap: 0.7rem;
+    padding: 0.5rem 0.75rem;
     z-index: 100;
   }
 
@@ -293,5 +352,53 @@
     height: 100%;
     background-color: #4caf50;
     transition: width 0.1s linear;
+  }
+
+  .navigation-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .nav-btn {
+    background: none;
+    border: none;
+    padding: 4px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    color: #666;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .nav-btn:hover:not(:disabled) {
+    background-color: #f5f5f5;
+    color: #333;
+  }
+
+  .nav-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+
+  .voice-btn {
+    background: none;
+    border: none;
+    font-size: 1rem;
+    cursor: pointer;
+    padding: 0.5rem;
+    border-radius: 8px;
+    transition: background-color 0.2s;
+    color: #666;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .voice-btn:hover {
+    background-color: #f5f5f5;
+    color: #333;
   }
 </style>
