@@ -2,13 +2,12 @@
   import { menuItems } from "./menu";
   import type { ConversationChunk } from "./menu";
   import HamburgerIcon from "./icons/HamburgerIcon.svelte";
+  import { currentSectionIndex, isMenuBarVisible } from "./store";
 
-  export let isVisible = false;
-  export let currentSectionIndex = 0;
   export let onMenuItemClick: (index: number) => void;
 
   function toggleSidebar() {
-    isVisible = !isVisible;
+    isMenuBarVisible.update(value => !value);
   }
 
   function handleMenuItemClick(item: ConversationChunk) {
@@ -21,19 +20,19 @@
     const nextItem = menuItems[currentItemIndex + 1];
     const endIndex = nextItem ? nextItem.index - 1 : Number.MAX_SAFE_INTEGER;
     
-    return currentSectionIndex >= item.index && currentSectionIndex <= endIndex;
+    return $currentSectionIndex >= item.index && $currentSectionIndex <= endIndex;
   }
 </script>
 
 <!-- Toggle Button (visible when sidebar is hidden) -->
-{#if !isVisible}
+{#if !$isMenuBarVisible}
   <button class="menu-toggle" on:click={toggleSidebar}>
     <HamburgerIcon />
   </button>
 {/if}
 
 <!-- Sidebar -->
-<div class="sidebar" class:visible={isVisible}>
+<div class="sidebar" class:visible={$isMenuBarVisible}>
   <div class="sidebar-header">
     <h3>Navigation</h3>
     <button class="close-btn" on:click={toggleSidebar}>
