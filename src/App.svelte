@@ -13,9 +13,28 @@
   let timeRemaining: number = 0;
   let timer: ReturnType<typeof setInterval> | null = null;
   let sectionElements: HTMLDivElement[] = [];
-  let voiceEnabled: boolean = false;
+  let voiceEnabled: boolean = true;
+  let audioDurations: Record<number, number> = {};
+  let audioPlayer: HTMLAudioElement | null = null;
+  let progressPercent: number = 0;
 
-  onMount(() => {
+  onMount(async () => {
+    // Load audio durations from generated file
+    try {
+      const response = await fetch("/audio/durations.json");
+      if (response.ok) {
+        audioDurations = await response.json();
+        console.log("Loaded audio durations:", audioDurations);
+      } else {
+        console.warn("Could not load durations.json, using fallback durations");
+      }
+    } catch (error) {
+      console.warn("Error loading audio durations:", error);
+    }
+
+    // Initialize single audio player
+    audioPlayer = new Audio();
+
     if (isAutoScrolling) {
       startTimer();
     }
@@ -25,12 +44,24 @@
     if (timer) {
       clearInterval(timer);
     }
+    if (audioPlayer) {
+      audioPlayer.pause();
+      audioPlayer = null;
+    }
   });
 
   function startTimer(): void {
     if (currentSectionIndex >= conversationSections.length) return;
 
-    timeRemaining = conversationSections[currentSectionIndex].durationMs;
+    // Use audio duration if available, otherwise fall back to manual duration
+    const audioDuration = audioDurations[currentSectionIndex];
+    timeRemaining =
+      audioDuration || conversationSections[currentSectionIndex].durationMs;
+
+    // Start audio playback if voice is enabled
+    if (voiceEnabled) {
+      playAudioForSection(currentSectionIndex);
+    }
 
     timer = setInterval(() => {
       timeRemaining -= 100;
@@ -45,6 +76,9 @@
     if (timer) {
       clearInterval(timer);
       timer = null;
+    }
+    if (audioPlayer) {
+      audioPlayer.pause();
     }
   }
 
@@ -128,13 +162,44 @@
 
   function toggleVoice(): void {
     voiceEnabled = !voiceEnabled;
+
+    if (audioPlayer) {
+      // Just mute/unmute the audio player - don't pause or reset progress
+      audioPlayer.muted = !voiceEnabled;
+    }
+
+    // If voice is enabled and we're auto-scrolling but no audio is playing, start it
+    if (voiceEnabled && isAutoScrolling && audioPlayer && audioPlayer.paused) {
+      playAudioForSection(currentSectionIndex);
+    }
   }
 
-  $: progressPercent = conversationSections[currentSectionIndex]
-    ? ((conversationSections[currentSectionIndex].durationMs - timeRemaining) /
-        conversationSections[currentSectionIndex].durationMs) *
-      100
-    : 0;
+  function playAudioForSection(index: number): void {
+    if (!voiceEnabled || !audioPlayer) return;
+
+    try {
+      // Change source and play
+      audioPlayer.src = `/audio/${index}.wav`;
+      audioPlayer.load(); // Reload the new source
+      audioPlayer.play().catch((error) => {
+        console.warn(`Could not play audio for section ${index}:`, error);
+      });
+    } catch (error) {
+      console.warn(`Error playing audio for section ${index}:`, error);
+    }
+  }
+
+  $: {
+    const currentSection = conversationSections[currentSectionIndex];
+    if (currentSection) {
+      // Use audio duration if available, otherwise fall back to manual duration
+      const totalDuration =
+        audioDurations[currentSectionIndex] || currentSection.durationMs;
+      progressPercent = ((totalDuration - timeRemaining) / totalDuration) * 100;
+    } else {
+      progressPercent = 0;
+    }
+  }
 </script>
 
 <div class="controls">

@@ -180,6 +180,7 @@ async function generateAudio(
     model: TTS_MODEL,
     voice: voice as any,
     input: text,
+    // instructions: "", TODO: add instructions
     response_format: "wav",
   });
 
