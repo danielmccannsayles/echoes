@@ -1,15 +1,23 @@
 <script>
-  import { conversationSections } from './lib/conversation';
+  import { conversationSections } from "./lib/conversation";
 </script>
 
 <main>
   {#each conversationSections as section}
     <div class="conversation-section">
-      <div class="speaker-label speaker-{section.speaker.toLowerCase().replace(' ', '-')}">
+      <div
+        class="speaker-label speaker-{section.speaker
+          .toLowerCase()
+          .replace(' ', '-')}"
+      >
         {section.speaker}
       </div>
-      <div class="content">
-        {@html section.content.replace(/\n/g, '<br>')}
+      <div
+        class="content content-{section.speaker
+          .toLowerCase()
+          .replace(' ', '-')}"
+      >
+        {@html section.content.replace(/\n/g, "<br>")}
       </div>
     </div>
   {/each}
@@ -22,11 +30,11 @@
 
   .speaker-label {
     margin-bottom: 0.5rem;
-    padding: 0.5rem 1rem;
-    border-radius: 20px;
+    padding: 0.2rem 0.4rem;
+    border-radius: 0.5rem;
     display: inline-block;
     font-weight: bold;
-    font-size: 0.9rem;
+    font-size: 0.8rem;
   }
 
   .speaker-human {
@@ -47,5 +55,9 @@
   .content {
     line-height: 1.6;
     white-space: pre-wrap;
+  }
+
+  .content-narrator {
+    font-style: italic;
   }
 </style>
