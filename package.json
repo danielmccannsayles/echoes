@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "generate-audio": "tsx scripts/generate-audio.ts",
+    "generate-split-audio": "tsx scripts/generate-split-audio.ts",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
