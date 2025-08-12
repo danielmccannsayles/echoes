@@ -7,6 +7,7 @@
   import DownIcon from "./lib/icons/DownIcon.svelte";
   import SpeakerIcon from "./lib/icons/SpeakerIcon.svelte";
   import SpeakerMutedIcon from "./lib/icons/SpeakerMutedIcon.svelte";
+  import MenuBar from "./lib/MenuBar.svelte";
 
   let currentSectionIndex: number = 0;
   let isAutoScrolling: boolean = false;
@@ -17,6 +18,7 @@
   let audioDurations: Record<number, number> = {};
   let audioPlayer: HTMLAudioElement | null = null;
   let progressPercent: number = 0;
+  let isMenuBarVisible: boolean = false;
 
   onMount(async () => {
     // Load audio durations from generated file
@@ -136,6 +138,11 @@
     startTimer();
   }
 
+  function handleMenuItemClick(index: number): void {
+    jumpToSection(index);
+    isMenuBarVisible = false; // Close sidebar after selection
+  }
+
   function previousSection(): void {
     if (currentSectionIndex > 0) {
       stopTimer();
@@ -202,7 +209,15 @@
   }
 </script>
 
-<div class="controls">
+<div class="app-layout">
+  <MenuBar 
+    bind:isVisible={isMenuBarVisible}
+    {currentSectionIndex}
+    onMenuItemClick={handleMenuItemClick}
+  />
+  
+  <div class="main-content">
+    <div class="controls">
   <div class="navigation-buttons">
     <button
       class="nav-btn"
@@ -274,8 +289,27 @@
     </div>
   {/each}
 </main>
+  </div>
+</div>
 
 <style>
+  .app-layout {
+    display: flex;
+    min-height: 100vh;
+  }
+
+  .main-content {
+    flex: 1;
+    min-width: 0; /* Prevents flex item from overflowing */
+  }
+
+  /* Hide sidebar on small screens, make main content full width */
+  @media (max-width: 1000px) {
+    .main-content {
+      width: 100%;
+    }
+  }
+
   .conversation-section {
     margin-bottom: 0.5rem;
     opacity: 0.4;
