@@ -3,6 +3,9 @@ import { config } from "dotenv";
 import OpenAI from "openai";
 import fs from "fs/promises";
 import path from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 import {
   conversationSections,
@@ -16,8 +19,9 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-const AUDIO_OUTPUT_DIR = "./generated-audio";
+const AUDIO_OUTPUT_DIR = path.join(__dirname, "../public/audio/");
 const TTS_MODEL = "tts-1";
+const CONCURRENCY_LIMIT = 5;
 
 // Voice options for different speakers
 const NARRATOR_VOICE = "ash";
@@ -31,9 +35,81 @@ const DEFAULT_AI_VOICE = "fable";
 
 async function ensureOutputDirectory() {
   try {
-    await fs.access(AUDIO_OUTPUT_DIR);
-  } catch {
-    await fs.mkdir(AUDIO_OUTPUT_DIR, { recursive: true });
+    // Clear existing audio files
+    try {
+      const files = await fs.readdir(AUDIO_OUTPUT_DIR);
+      const audioFiles = files.filter(
+        (file) => file.endsWith(".wav") || file === "durations.json"
+      );
+      for (const file of audioFiles) {
+        await fs.unlink(path.join(AUDIO_OUTPUT_DIR, file));
+      }
+      console.log(`Cleared ${audioFiles.length} existing audio files`);
+    } catch {
+      // Directory doesn't exist, create it
+      await fs.mkdir(AUDIO_OUTPUT_DIR, { recursive: true });
+      console.log(`Created output directory: ${AUDIO_OUTPUT_DIR}`);
+    }
+  } catch (error) {
+    console.error("Error setting up output directory:", error);
+    throw error;
+  }
+}
+
+async function getWavDuration(filepath: string): Promise<number> {
+  try {
+    const stats = await fs.stat(filepath);
+    const buffer = await fs.readFile(filepath);
+
+    // Verify WAV file format
+    if (
+      buffer.subarray(0, 4).toString() !== "RIFF" ||
+      buffer.subarray(8, 12).toString() !== "WAVE"
+    ) {
+      throw new Error("Not a valid WAV file");
+    }
+
+    // Read basic WAV header info (positions are fixed in standard WAV)
+    const sampleRate = buffer.readUInt32LE(24);
+    const numChannels = buffer.readUInt16LE(22);
+    const bitsPerSample = buffer.readUInt16LE(34);
+
+    // For OpenAI TTS WAV files, use simpler calculation based on file size
+    // Subtract 44 bytes for standard WAV header
+    const dataSize = stats.size - 44;
+    const bytesPerSample = bitsPerSample / 8;
+    const totalSamples = dataSize / (numChannels * bytesPerSample);
+    const durationSeconds = totalSamples / sampleRate;
+
+    console.log(`WAV Analysis for ${filepath}:`);
+    console.log(`  File Size: ${stats.size} bytes`);
+    console.log(`  Data Size (estimated): ${dataSize} bytes`);
+    console.log(`  Sample Rate: ${sampleRate}Hz`);
+    console.log(`  Channels: ${numChannels}`);
+    console.log(`  Bits per Sample: ${bitsPerSample}`);
+    console.log(`  Duration: ${durationSeconds.toFixed(2)}s`);
+
+    return Math.round(durationSeconds * 1000);
+  } catch (error) {
+    console.error(`Error reading WAV duration for ${filepath}:`, error);
+    return 0;
+  }
+}
+
+async function limitConcurrency<T>(
+  items: T[],
+  processor: (item: T) => Promise<any>,
+  limit: number
+): Promise<void> {
+  const results: Promise<any>[] = [];
+
+  for (let i = 0; i < items.length; i += limit) {
+    const batch = items.slice(i, i + limit);
+    const batchPromises = batch.map(processor);
+    results.push(...batchPromises);
+
+    // Wait for this batch to complete before starting the next
+    await Promise.all(batchPromises);
   }
 }
 
@@ -116,7 +192,8 @@ async function generateAudio(
 
 async function processConversationSection(
   section: ConversationSection,
-  index: number
+  index: number,
+  durationMap: Record<number, number>
 ): Promise<void> {
   console.log(`\nProcessing section ${index}: ${section.speaker}`);
   console.log(`Content preview: ${section.content.substring(0, 100)}...`);
@@ -127,8 +204,6 @@ async function processConversationSection(
     if (section.speaker === "Artificial Mind") {
       // Ask GPT-4o to select the voice
       voice = await selectAIVoice(section.content);
-      // Small delay after GPT call
-      await new Promise((resolve) => setTimeout(resolve, 300));
     } else {
       // Use predefined voice for Narrator and Human
       voice = getVoiceForSpeaker(section.speaker);
@@ -137,10 +212,14 @@ async function processConversationSection(
     const filename = `${index}.wav`;
     await generateAudio(section.content, voice, filename);
 
-    // Add a small delay between TTS calls to avoid rate limits
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    // Capture duration after file is generated
+    const filepath = path.join(AUDIO_OUTPUT_DIR, filename);
+    const duration = await getWavDuration(filepath);
+    durationMap[index] = duration;
+
+    console.log(`✅ Section ${index} completed (${duration}ms)`);
   } catch (error) {
-    console.error(`Error processing section ${index}:`, error);
+    console.error(`❌ Error processing section ${index}:`, error);
   }
 }
 
@@ -155,21 +234,50 @@ async function main() {
     });
     console.log(`Narrator Voice: ${NARRATOR_VOICE}`);
     console.log(`Human Voice: ${HUMAN_VOICE}`);
+    console.log(`Concurrency Limit: ${CONCURRENCY_LIMIT}`);
 
     // Ensure output directory exists
     await ensureOutputDirectory();
 
     console.log(
-      `\nProcessing ${conversationSections.length} conversation sections`
+      `\nProcessing ${conversationSections.length} conversation sections with ${CONCURRENCY_LIMIT} concurrent requests`
     );
 
-    // Process each conversation section
-    for (let i = 0; i < conversationSections.length; i++) {
-      await processConversationSection(conversationSections[i], i);
-    }
+    // Duration mapping to store results
+    const durationMap: Record<number, number> = {};
+
+    // Create array of section indices for concurrent processing
+    const sectionIndices = Array.from(
+      { length: conversationSections.length },
+      (_, i) => i
+    );
+
+    // Process sections concurrently with limit
+    await limitConcurrency(
+      sectionIndices,
+      async (index) => {
+        await processConversationSection(
+          conversationSections[index],
+          index,
+          durationMap
+        );
+      },
+      CONCURRENCY_LIMIT
+    );
+
+    // Save duration mapping to JSON file
+    const durationMapPath = path.join(AUDIO_OUTPUT_DIR, "durations.json");
+    await fs.writeFile(durationMapPath, JSON.stringify(durationMap, null, 2));
 
     console.log("\n✅ Audio generation completed!");
     console.log(`Audio files saved in: ${AUDIO_OUTPUT_DIR}`);
+    console.log(`Duration mapping saved to: ${durationMapPath}`);
+    console.log("\nDuration Summary:");
+    Object.entries(durationMap).forEach(([index, duration]) => {
+      console.log(
+        `  Section ${index}: ${duration}ms (${(duration / 1000).toFixed(1)}s)`
+      );
+    });
   } catch (error) {
     console.error("❌ Script failed:", error);
     process.exit(1);
