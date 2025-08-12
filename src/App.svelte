@@ -3,35 +3,28 @@
   import { conversationSections } from "./lib/conversation";
   import MenuBar from "./lib/MenuBar.svelte";
   import Controls from "./lib/Controls.svelte";
+  import VoiceModeToggle from "./lib/VoiceModeToggle.svelte";
   import {
     currentSectionIndex,
     isAutoScrolling,
     timeRemaining,
     voiceEnabled,
+    voiceModeIsSplit,
     audioDurations,
     progressPercent,
     isMenuBarVisible,
-    currentSection
+    currentSection,
+    audioPath,
   } from "./lib/store";
 
   let timer: ReturnType<typeof setInterval> | null = null;
   let sectionElements: HTMLDivElement[] = [];
   let audioPlayer: HTMLAudioElement | null = null;
+  let loadingAudioDurations = false;
 
   onMount(async () => {
     // Load audio durations from generated file
-    try {
-      const response = await fetch("/audio/durations.json");
-      if (response.ok) {
-        const durations = await response.json();
-        audioDurations.set(durations);
-        console.log("Loaded audio durations:", durations);
-      } else {
-        console.warn("Could not load durations.json, using fallback durations");
-      }
-    } catch (error) {
-      console.warn("Error loading audio durations:", error);
-    }
+    loadAudioDurations();
 
     // Initialize single audio player
     audioPlayer = new Audio();
@@ -40,6 +33,26 @@
       startTimer();
     }
   });
+
+  async function loadAudioDurations() {
+    if (loadingAudioDurations) return;
+
+    loadingAudioDurations = true;
+    try {
+      const currentPath = $audioPath;
+      const response = await fetch(`${currentPath}/durations.json`);
+      if (response.ok) {
+        const durations = await response.json();
+        audioDurations.set(durations);
+      } else {
+        console.warn("Could not load durations.json, using fallback durations");
+      }
+    } catch (error) {
+      console.warn("Error loading audio durations:", error);
+    } finally {
+      loadingAudioDurations = false;
+    }
+  }
 
   onDestroy(() => {
     if (timer) {
@@ -66,7 +79,7 @@
     }
 
     timer = setInterval(() => {
-      timeRemaining.update(time => {
+      timeRemaining.update((time) => {
         const newTime = time - 100;
         if (newTime <= 0) {
           nextSection();
@@ -89,7 +102,7 @@
 
   function nextSection(): void {
     if ($currentSectionIndex < conversationSections.length - 1) {
-      currentSectionIndex.update(index => index + 1);
+      currentSectionIndex.update((index) => index + 1);
       scrollToSection($currentSectionIndex);
 
       if ($isAutoScrolling) {
@@ -119,7 +132,7 @@
   }
 
   function toggleAutoScroll(): void {
-    isAutoScrolling.update(value => !value);
+    isAutoScrolling.update((value) => !value);
 
     if ($isAutoScrolling) {
       scrollToSection($currentSectionIndex);
@@ -148,7 +161,7 @@
   function previousSection(): void {
     if ($currentSectionIndex > 0) {
       stopTimer();
-      currentSectionIndex.update(index => index - 1);
+      currentSectionIndex.update((index) => index - 1);
       scrollToSection($currentSectionIndex);
 
       if ($isAutoScrolling) {
@@ -160,7 +173,7 @@
   function nextSectionManual(): void {
     if ($currentSectionIndex < conversationSections.length - 1) {
       stopTimer();
-      currentSectionIndex.update(index => index + 1);
+      currentSectionIndex.update((index) => index + 1);
       scrollToSection($currentSectionIndex);
 
       if ($isAutoScrolling) {
@@ -170,7 +183,7 @@
   }
 
   function toggleVoice(): void {
-    voiceEnabled.update(value => !value);
+    voiceEnabled.update((value) => !value);
 
     if (audioPlayer) {
       // Just mute/unmute the audio player - don't pause or reset progress
@@ -178,7 +191,12 @@
     }
 
     // If voice is enabled and we're auto-scrolling but no audio is playing, start it
-    if ($voiceEnabled && $isAutoScrolling && audioPlayer && audioPlayer.paused) {
+    if (
+      $voiceEnabled &&
+      $isAutoScrolling &&
+      audioPlayer &&
+      audioPlayer.paused
+    ) {
       playAudioForSection($currentSectionIndex);
     }
   }
@@ -188,7 +206,7 @@
 
     try {
       // Change source and play
-      audioPlayer.src = `/audio/${index}.wav`;
+      audioPlayer.src = `${$audioPath}/${index}.wav`;
       audioPlayer.load(); // Reload the new source
       audioPlayer.play().catch((error) => {
         console.warn(`Could not play audio for section ${index}:`, error);
@@ -204,17 +222,27 @@
       // Use audio duration if available, otherwise fall back to manual duration
       const totalDuration =
         $audioDurations[$currentSectionIndex] || $currentSection.durationMs;
-      progressPercent.set(((totalDuration - $timeRemaining) / totalDuration) * 100);
+      progressPercent.set(
+        ((totalDuration - $timeRemaining) / totalDuration) * 100
+      );
     } else {
       progressPercent.set(0);
+    }
+  }
+
+  // Reactive statement to reload audio durations when voice mode changes
+  $: {
+    if ($audioPath) {
+      loadAudioDurations();
     }
   }
 </script>
 
 <div class="app">
   <MenuBar onMenuItemClick={handleMenuItemClick} />
-  
-  <Controls 
+  <VoiceModeToggle />
+
+  <Controls
     onToggleAutoScroll={toggleAutoScroll}
     onPreviousSection={previousSection}
     onNextSection={nextSectionManual}

@@ -27,9 +27,10 @@ const CONCURRENCY_LIMIT = 5;
 const NARRATOR_VOICE = "ash";
 const HUMAN_VOICE = "echo";
 const AI_VOICE_OPTIONS = [
-  { number: 1, voice: "echo", description: "boyish tone" },
+  { number: 1, voice: "onyx", description: "low, gravely." },
   { number: 2, voice: "fable", description: "matter of fact, explanatory" },
-  { number: 3, voice: "shimmer", description: "lightly playful" },
+  { number: 3, voice: "shimmer", description: "soft and steady" },
+  { number: 4, voice: "nova", description: "lightly playful" },
 ];
 const DEFAULT_AI_VOICE = "fable";
 
@@ -80,14 +81,6 @@ async function getWavDuration(filepath: string): Promise<number> {
     const bytesPerSample = bitsPerSample / 8;
     const totalSamples = dataSize / (numChannels * bytesPerSample);
     const durationSeconds = totalSamples / sampleRate;
-
-    console.log(`WAV Analysis for ${filepath}:`);
-    console.log(`  File Size: ${stats.size} bytes`);
-    console.log(`  Data Size (estimated): ${dataSize} bytes`);
-    console.log(`  Sample Rate: ${sampleRate}Hz`);
-    console.log(`  Channels: ${numChannels}`);
-    console.log(`  Bits per Sample: ${bitsPerSample}`);
-    console.log(`  Duration: ${durationSeconds.toFixed(2)}s`);
 
     return Math.round(durationSeconds * 1000);
   } catch (error) {

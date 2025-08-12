@@ -1,9 +1,11 @@
 // Generate audio BUT we allow the AI to split it into different voices.
+// The output looks the same, since we stitch the wavs back together
 import { config } from "dotenv";
 import OpenAI from "openai";
 import fs from "fs/promises";
 import path from "path";
 import { fileURLToPath } from "url";
+import { execSync } from "child_process";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -20,6 +22,7 @@ const openai = new OpenAI({
 });
 
 const AUDIO_OUTPUT_DIR = path.join(__dirname, "../public/split-audio/");
+const TEMP_DIR = path.join(AUDIO_OUTPUT_DIR, "temp/");
 const TTS_MODEL = "tts-1";
 const CONCURRENCY_LIMIT = 8;
 
@@ -36,7 +39,7 @@ const DEFAULT_AI_VOICE = "fable";
 
 async function ensureOutputDirectory() {
   try {
-    // Clear existing audio files and subdirectories
+    // Clear existing audio files
     try {
       const items = await fs.readdir(AUDIO_OUTPUT_DIR);
       let clearedCount = 0;
@@ -61,6 +64,9 @@ async function ensureOutputDirectory() {
       await fs.mkdir(AUDIO_OUTPUT_DIR, { recursive: true });
       console.log(`Created output directory: ${AUDIO_OUTPUT_DIR}`);
     }
+
+    // Create temp directory for intermediate files
+    await fs.mkdir(TEMP_DIR, { recursive: true });
   } catch (error) {
     console.error("Error setting up output directory:", error);
     throw error;
@@ -242,7 +248,7 @@ async function generateAudio(
   text: string,
   voice: string,
   filename: string,
-  outputDir: string = AUDIO_OUTPUT_DIR
+  outputDir: string = TEMP_DIR
 ): Promise<void> {
   console.log(`Generating audio with voice "${voice}" for: ${filename}`);
 
@@ -250,7 +256,6 @@ async function generateAudio(
     model: TTS_MODEL,
     voice: voice as any,
     input: text,
-    // instructions: "", TODO: add instructions
     response_format: "wav",
   });
 
@@ -261,24 +266,68 @@ async function generateAudio(
   console.log(`Audio saved: ${filepath}`);
 }
 
+async function stitchAudioFiles(
+  filePaths: string[],
+  outputPath: string
+): Promise<void> {
+  if (filePaths.length === 0) {
+    throw new Error("No files to stitch");
+  }
+
+  if (filePaths.length === 1) {
+    // Just copy the single file
+    await fs.copyFile(filePaths[0], outputPath);
+    return;
+  }
+
+  try {
+    // Create a temporary file list for FFmpeg
+    const fileListPath = path.join(TEMP_DIR, `filelist_${Date.now()}.txt`);
+    const fileListContent = filePaths
+      .map((fp) => `file '${path.resolve(fp)}'`)
+      .join("\n");
+
+    await fs.writeFile(fileListPath, fileListContent);
+
+    // Use FFmpeg to concatenate the files
+    const ffmpegCommand = `ffmpeg -f concat -safe 0 -i "${fileListPath}" -c copy "${outputPath}"`;
+
+    console.log(
+      `Stitching ${filePaths.length} files into: ${path.basename(outputPath)}`
+    );
+    execSync(ffmpegCommand, { stdio: "pipe" });
+
+    // Clean up the file list
+    await fs.unlink(fileListPath);
+
+    console.log(`✅ Successfully stitched audio: ${path.basename(outputPath)}`);
+  } catch (error) {
+    console.error(`❌ Error stitching audio files:`, error);
+    throw error;
+  }
+}
+
+interface SectionAudioFiles {
+  sectionIndex: number;
+  filePaths: string[];
+  totalDuration: number;
+}
+
 async function processConversationSection(
   section: ConversationSection,
-  index: number,
-  durationMap: Record<string, number>
-): Promise<void> {
+  index: number
+): Promise<SectionAudioFiles> {
   console.log(`\nProcessing section ${index}: ${section.speaker}`);
   console.log(`Content preview: ${section.content.substring(0, 100)}...`);
 
-  try {
-    // Create section directory
-    const sectionDir = path.join(AUDIO_OUTPUT_DIR, index.toString());
-    await fs.mkdir(sectionDir, { recursive: true });
+  const filePaths: string[] = [];
+  let totalDuration = 0;
 
+  try {
     if (section.speaker === "Artificial Mind") {
       // Ask GPT-4o to select voices and split content
       const voiceChunks = await selectAIVoice(section.content);
 
-      let totalDuration = 0;
       for (let chunkIndex = 0; chunkIndex < voiceChunks.length; chunkIndex++) {
         const chunk = voiceChunks[chunkIndex];
         const voiceOption = AI_VOICE_OPTIONS.find(
@@ -286,14 +335,14 @@ async function processConversationSection(
         );
         const voice = voiceOption?.voice || DEFAULT_AI_VOICE;
 
-        const filename = `${chunkIndex}.wav`;
-        await generateAudio(chunk.text, voice, filename, sectionDir);
+        const filename = `section_${index}_chunk_${chunkIndex}.wav`;
+        await generateAudio(chunk.text, voice, filename);
 
         // Capture duration for this chunk
-        const filepath = path.join(sectionDir, filename);
+        const filepath = path.join(TEMP_DIR, filename);
         const duration = await getWavDuration(filepath);
-        durationMap[`${index}/${chunkIndex}`] = duration;
         totalDuration += duration;
+        filePaths.push(filepath);
 
         console.log(
           `  ✅ Chunk ${chunkIndex} completed (${duration}ms) with voice ${voice}`
@@ -306,20 +355,33 @@ async function processConversationSection(
     } else {
       // Use predefined voice for Narrator and Human (single chunk)
       const voice = getVoiceForSpeaker(section.speaker);
-      const filename = `0.wav`;
-      await generateAudio(section.content, voice, filename, sectionDir);
+      const filename = `section_${index}_single.wav`;
+      await generateAudio(section.content, voice, filename);
 
       // Capture duration
-      const filepath = path.join(sectionDir, filename);
+      const filepath = path.join(TEMP_DIR, filename);
       const duration = await getWavDuration(filepath);
-      durationMap[`${index}/0`] = duration;
+      totalDuration = duration;
+      filePaths.push(filepath);
 
       console.log(
         `✅ Section ${index} completed (${duration}ms) with voice ${voice}`
       );
     }
+
+    return { sectionIndex: index, filePaths, totalDuration };
   } catch (error) {
     console.error(`❌ Error processing section ${index}:`, error);
+    throw error;
+  }
+}
+
+async function cleanupTempFiles(): Promise<void> {
+  try {
+    await fs.rm(TEMP_DIR, { recursive: true, force: true });
+    console.log("✅ Cleaned up temporary files");
+  } catch (error) {
+    console.warn("⚠️  Could not clean up temporary files:", error);
   }
 }
 
@@ -345,6 +407,7 @@ async function main() {
 
     // Duration mapping to store results
     const durationMap: Record<string, number> = {};
+    const sectionResults: SectionAudioFiles[] = [];
 
     // Create array of section indices for concurrent processing
     const sectionIndices = Array.from(
@@ -356,37 +419,74 @@ async function main() {
     await limitConcurrency(
       sectionIndices,
       async (index) => {
-        await processConversationSection(
+        const result = await processConversationSection(
           conversationSections[index],
-          index,
-          durationMap
+          index
         );
+        sectionResults[index] = result;
+        durationMap[index.toString()] = result.totalDuration;
       },
       CONCURRENCY_LIMIT
     );
+
+    // Sort results by section index to maintain order
+    sectionResults.sort((a, b) => a.sectionIndex - b.sectionIndex);
+
+    console.log("\n🔗 Stitching sections into final audio files...");
+
+    // Stitch each section's chunks together and create final numbered files
+    for (let i = 0; i < sectionResults.length; i++) {
+      const section = sectionResults[i];
+      const outputFilename = `${i}.wav`;
+      const outputPath = path.join(AUDIO_OUTPUT_DIR, outputFilename);
+
+      await stitchAudioFiles(section.filePaths, outputPath);
+
+      const finalDuration = await getWavDuration(outputPath);
+      console.log(
+        `  ${outputFilename}: ${finalDuration}ms (${(
+          finalDuration / 1000
+        ).toFixed(1)}s)`
+      );
+    }
 
     // Save duration mapping to JSON file
     const durationMapPath = path.join(AUDIO_OUTPUT_DIR, "durations.json");
     await fs.writeFile(durationMapPath, JSON.stringify(durationMap, null, 2));
 
-    console.log("\n✅ Audio generation completed!");
+    // Clean up temporary files
+    await cleanupTempFiles();
+
+    console.log("\n✅ Audio generation and stitching completed!");
     console.log(`Audio files saved in: ${AUDIO_OUTPUT_DIR}`);
+    console.log(
+      `Final files: ${sectionResults.map((_, i) => `${i}.wav`).join(", ")}`
+    );
     console.log(`Duration mapping saved to: ${durationMapPath}`);
     console.log("\nDuration Summary:");
-    Object.entries(durationMap).forEach(([path, duration]) => {
+    Object.entries(durationMap).forEach(([index, duration]) => {
       console.log(
-        `  ${path}: ${duration}ms (${(duration / 1000).toFixed(1)}s)`
+        `  ${index}.wav: ${duration}ms (${(duration / 1000).toFixed(1)}s)`
       );
     });
   } catch (error) {
     console.error("❌ Script failed:", error);
+
+    // Try to clean up temp files even on failure
+    try {
+      await cleanupTempFiles();
+    } catch {}
+
     process.exit(1);
   }
 }
 
 // Handle graceful shutdown
-process.on("SIGINT", () => {
+process.on("SIGINT", async () => {
   console.log("\n⏹️  Script interrupted by user");
+  try {
+    await cleanupTempFiles();
+  } catch {}
   process.exit(0);
 });
 

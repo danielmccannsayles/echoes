@@ -1,10 +1,11 @@
-import { writable, derived } from 'svelte/store';
-import { conversationSections } from './conversation';
+import { writable, derived } from "svelte/store";
+import { conversationSections } from "./conversation";
 
 export const currentSectionIndex = writable<number>(0);
 export const isAutoScrolling = writable<boolean>(false);
 export const timeRemaining = writable<number>(0);
 export const voiceEnabled = writable<boolean>(true);
+export const voiceModeIsSplit = writable<boolean>(false);
 export const audioDurations = writable<Record<number, number>>({});
 export const progressPercent = writable<number>(0);
 export const isMenuBarVisible = writable<boolean>(false);
@@ -21,5 +22,10 @@ export const isAtFirstSection = derived(
 
 export const isAtLastSection = derived(
   currentSectionIndex,
-  ($currentSectionIndex) => $currentSectionIndex === conversationSections.length - 1
+  ($currentSectionIndex) =>
+    $currentSectionIndex === conversationSections.length - 1
+);
+
+export const audioPath = derived(voiceModeIsSplit, ($voiceModeIsSplit) =>
+  $voiceModeIsSplit ? "/split_audio" : "/audio"
 );
