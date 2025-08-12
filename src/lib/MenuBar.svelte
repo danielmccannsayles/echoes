@@ -1,6 +1,7 @@
 <script lang="ts">
   import { menuItems } from "./menu";
   import type { ConversationChunk } from "./menu";
+  import HamburgerIcon from "./icons/HamburgerIcon.svelte";
 
   export let isVisible = false;
   export let currentSectionIndex = 0;
@@ -27,9 +28,7 @@
 <!-- Toggle Button (visible when sidebar is hidden) -->
 {#if !isVisible}
   <button class="menu-toggle" on:click={toggleSidebar}>
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M3 12h18M3 6h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-    </svg>
+    <HamburgerIcon />
   </button>
 {/if}
 
@@ -38,9 +37,7 @@
   <div class="sidebar-header">
     <h3>Navigation</h3>
     <button class="close-btn" on:click={toggleSidebar}>
-      <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
-        <path d="M15 5L5 15M5 5l10 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-      </svg>
+      <HamburgerIcon />
     </button>
   </div>
 
@@ -178,9 +175,10 @@
     overflow: hidden;
   }
 
-  /* Hide sidebar on small screens */
+  /* Hide sidebar and toggle button on small screens */
   @media (max-width: 1000px) {
-    .sidebar {
+    .sidebar,
+    .menu-toggle {
       display: none;
     }
   }
