@@ -140,7 +140,6 @@
 
   function handleMenuItemClick(index: number): void {
     jumpToSection(index);
-    isMenuBarVisible = false; // Close sidebar after selection
   }
 
   function previousSection(): void {
@@ -216,7 +215,7 @@
     onMenuItemClick={handleMenuItemClick}
   />
   
-  <div class="main-content">
+  <div class="main-content" class:sidebar-visible={isMenuBarVisible}>
     <div class="controls">
   <div class="navigation-buttons">
     <button
@@ -301,12 +300,19 @@
   .main-content {
     flex: 1;
     min-width: 0; /* Prevents flex item from overflowing */
+    margin-left: 0;
+    transition: margin-left 0.3s ease-in-out;
+  }
+
+  .main-content.sidebar-visible {
+    margin-left: 280px;
   }
 
   /* Hide sidebar on small screens, make main content full width */
   @media (max-width: 1000px) {
     .main-content {
       width: 100%;
+      margin-left: 0 !important;
     }
   }
 
