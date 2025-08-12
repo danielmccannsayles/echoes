@@ -1,6 +1,6 @@
 body {
   margin: 0;
-  padding: 2rem 0;
+  padding: 120px 0 2rem 0; /* Top padding accounts for sticky controls height */
   font-family: "Lora", serif;
   color: rgb(87, 83, 78); /* stone-600 color */
 }
