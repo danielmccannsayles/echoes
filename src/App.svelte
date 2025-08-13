@@ -23,10 +23,8 @@
   let loadingAudioDurations = false;
 
   onMount(async () => {
-    // Load audio durations from generated file
     loadAudioDurations();
 
-    // Initialize audio player
     audioPlayer = new Audio();
 
     if ($isAutoScrolling) {
@@ -67,7 +65,7 @@
   function startTimer(): void {
     if ($currentSectionIndex >= conversationSections.length) return;
 
-    // Use audio duration if available, otherwise fall back to manual duration
+    // Fall back to manual duration (super incorrect)
     const audioDuration = $audioDurations[$currentSectionIndex];
     timeRemaining.set(
       audioDuration || conversationSections[$currentSectionIndex].durationMs
