@@ -27,5 +27,5 @@ export const isAtLastSection = derived(
 );
 
 export const audioPath = derived(voiceModeIsSplit, ($voiceModeIsSplit) =>
-  $voiceModeIsSplit ? "/split_audio" : "/audio"
+  $voiceModeIsSplit ? "split_audio" : "audio"
 );
