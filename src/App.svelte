@@ -68,12 +68,10 @@
     if ($currentSectionIndex >= conversationSections.length) return;
     
     sectionStartTime = Date.now();
-    console.log('Starting timer for section:', $currentSectionIndex, 'at time:', sectionStartTime);
 
     // Fall back to manual duration (super incorrect)
     const audioDuration = $audioDurations[$currentSectionIndex];
     const duration = audioDuration || conversationSections[$currentSectionIndex].durationMs;
-    console.log('Section duration:', duration, 'ms');
     
     // Use local variable for timing instead of store to avoid reactivity issues
     let localTimeRemaining = duration;
@@ -88,13 +86,8 @@
       localTimeRemaining -= 100;
       timeRemaining.set(localTimeRemaining);
       
-      if (Date.now() - sectionStartTime < 200) {
-        console.log('Timer tick, localTimeRemaining:', localTimeRemaining);
-      }
       
       if (localTimeRemaining <= 0) {
-        const actualElapsed = Date.now() - sectionStartTime;
-        console.log('Timer reached zero, calling nextSection from section', $currentSectionIndex, 'actual elapsed time:', actualElapsed, 'ms');
         // Clear timer immediately to prevent multiple calls
         if (timer) {
           clearInterval(timer);
@@ -116,29 +109,23 @@
   }
 
   function nextSection(): void {
-    console.log('nextSection called, current index:', $currentSectionIndex);
     if ($currentSectionIndex < conversationSections.length - 1) {
       // Stop timer and audio first to prevent multiple calls
-      console.log('Stopping timer and moving to next section');
       stopTimer();
       
       currentSectionIndex.update((index) => index + 1);
-      console.log('Updated to section:', $currentSectionIndex);
       scrollToSection($currentSectionIndex);
 
       if ($isAutoScrolling) {
-        console.log('Auto-scrolling enabled, starting new timer');
         startTimer();
       }
     } else {
-      console.log('Reached end of sections, stopping auto-scroll');
       isAutoScrolling.set(false);
       stopTimer();
     }
   }
 
   function scrollToSection(index: number): void {
-    console.log('scrollToSection called for index:', index);
     const element: HTMLDivElement | undefined = sectionElements[index];
     if (element) {
       isScrolling = true;
@@ -150,7 +137,6 @@
         elementTop - Math.max(0, (viewportHeight - elementHeight) / 2)
       );
 
-      console.log('Scrolling to position:', scrollTo, 'for element at top:', elementTop);
       window.scrollTo({
         top: scrollTo,
         behavior: "smooth",
@@ -159,7 +145,6 @@
       // Reset scrolling flag after animation completes
       setTimeout(() => {
         isScrolling = false;
-        console.log('Scroll animation completed');
       }, 1000);
     }
   }
