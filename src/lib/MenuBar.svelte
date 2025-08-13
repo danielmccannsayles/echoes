@@ -7,7 +7,7 @@
   export let onMenuItemClick: (index: number) => void;
 
   function toggleSidebar() {
-    isMenuBarVisible.update(value => !value);
+    isMenuBarVisible.update((value) => !value);
   }
 
   function handleMenuItemClick(item: ConversationChunk) {
@@ -19,8 +19,10 @@
     const currentItemIndex = menuItems.indexOf(item);
     const nextItem = menuItems[currentItemIndex + 1];
     const endIndex = nextItem ? nextItem.index - 1 : Number.MAX_SAFE_INTEGER;
-    
-    return $currentSectionIndex >= item.index && $currentSectionIndex <= endIndex;
+
+    return (
+      $currentSectionIndex >= item.index && $currentSectionIndex <= endIndex
+    );
   }
 </script>
 
@@ -42,8 +44,8 @@
 
   <nav class="menu">
     {#each menuItems as item}
-      <button 
-        class="menu-item" 
+      <button
+        class="menu-item"
         class:current={isCurrentSection(item)}
         on:click={() => handleMenuItemClick(item)}
       >
@@ -81,7 +83,7 @@
     position: fixed;
     top: 0;
     left: 0;
-    width: 280px;
+    width: 330px;
     height: 100vh;
     background: white;
     border-right: 1px solid #e5e5e5;

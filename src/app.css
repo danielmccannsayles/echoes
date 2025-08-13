@@ -1,3 +1,7 @@
+:root {
+  --mobile-breakpoint: 1070px;
+}
+
 body {
   margin: 0;
   padding: 120px 0 2rem 0; /* Top padding accounts for sticky controls height */
