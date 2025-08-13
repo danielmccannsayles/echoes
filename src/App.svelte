@@ -26,7 +26,7 @@
     // Load audio durations from generated file
     loadAudioDurations();
 
-    // Initialize single audio player
+    // Initialize audio player
     audioPlayer = new Audio();
 
     if ($isAutoScrolling) {
